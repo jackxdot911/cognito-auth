@@ -1,0 +1,11 @@
+{
+  "aws_project_region": "us-east-1",
+  "aws_user_pools_id": "us-east-1_arploUSO9",
+  "aws_user_pools_web_client_id": "6878lk42lk73vv8a7jr4uspknk",
+  "oauth": {
+    "domain": "https://nick.auth.us-east-1.amazoncognito.com",
+    "redirectSignIn": "myapp://",
+    "redirectSignOut": "myapp://",
+    "responseType": "code"
+  }
+}
