@@ -5,10 +5,9 @@ import {
   View,
   ActivityIndicator,
   Platform,
-  Linking,
 } from "react-native";
 import React, { useState, useEffect } from "react";
-import { signInWithRedirect, getCurrentUser } from "aws-amplify/auth";
+import { signInWithRedirect, getCurrentUser, fetchAuthSession } from "aws-amplify/auth";
 import { router } from "expo-router";
 import * as WebBrowser from "expo-web-browser";
 
@@ -34,10 +33,37 @@ const Federated = () => {
     }
   };
 
+  const handleAuthCode = async (url: string) => {
+    try {
+      // Extract the code from the URL
+      const code = new URL(url).searchParams.get('code');
+      if (!code) {
+        throw new Error('No authorization code received');
+      }
+
+      console.log('Received auth code:', code);
+
+      // Try to get the auth session which should trigger the code exchange
+      const session = await fetchAuthSession();
+      console.log('Auth session obtained:', !!session);
+
+      // Verify the user is authenticated
+      const user = await getCurrentUser();
+      console.log('User authenticated:', !!user);
+
+      if (user) {
+        router.replace("/");
+      } else {
+        throw new Error('Failed to authenticate user after code exchange');
+      }
+    } catch (err) {
+      console.error('Error handling auth code:', err);
+      throw err;
+    }
+  };
+
   const constructHostedUIURL = () => {
-    // Ensure the redirect URI is properly encoded
     
-    // Construct the hosted UI URL with all required parameters
     const hostedUIURL = 
       "https://nick.auth.us-east-1.amazoncognito.com/login?client_id=6878lk42lk73vv8a7jr4uspknk&response_type=code&scope=email+openid+phone&redirect_uri=reistta%3A%2F%2F";
 
@@ -53,20 +79,15 @@ const Federated = () => {
       if (Platform.OS === "web") {
         await signInWithRedirect({ provider: "Google" });
       } else {
-        // Log initial state
         console.log('Starting Google Sign In...');
         
-        // Get the hosted UI URL
         const authURL = constructHostedUIURL();
-        
-        // Open the auth session with more options
         const result = await WebBrowser.openAuthSessionAsync(
           authURL,
           'reistta://',
           {
             showInRecents: true,
             preferEphemeralSession: true,
-            createTask: false,
           }
         );
         
@@ -74,8 +95,7 @@ const Federated = () => {
         
         if (result.type === 'success' && result.url) {
           console.log('Success URL:', result.url);
-          // Try to get user after successful redirect
-          await checkAuth();
+          await handleAuthCode(result.url);
         } else if (result.type === 'dismiss') {
           console.log('Auth session was dismissed');
           setError('Sign in was cancelled. Please try again.');
@@ -143,12 +163,3 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   }
 });
-
-
-
-
-
-
-
-
-
