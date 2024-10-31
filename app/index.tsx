@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   View,
   Button,
@@ -7,23 +7,61 @@ import {
   StyleSheet,
 } from "react-native";
 import { router, useFocusEffect } from "expo-router";
-import { fetchUserAttributes, signOut } from "@aws-amplify/auth";
-import { fetchAuthSession, signInWithRedirect } from "aws-amplify/auth";
+import { Linking } from 'react-native';
+import { 
+  fetchUserAttributes, 
+  signOut, 
+  fetchAuthSession, 
+  getCurrentUser
+} from 'aws-amplify/auth';
 import authHeader from "../services/authHeader";
 
+type UserDetails = {
+  email: string;
+  email_verified: boolean;
+  sub: string;
+};
+
+type SessionTokens = {
+  idToken?: string;
+  accessToken?: string;
+};
+
 export default function Index() {
-  const [userDetails, setUserDetails] = useState<any>();
-  const [session, setSession] = useState<any>();
+  const [userDetails, setUserDetails] = useState<UserDetails | null>();
+  const [session, setSession] = useState<SessionTokens | null>();
   const [loading, setLoading] = useState(true);
   const [logoutLoading, setLogoutLoading] = useState(false);
+
+  useEffect(() => {
+    const handleOAuthResponse = async (url: string) => {
+      try {
+        // Check if user exists after OAuth redirect
+        const currentUser = await getCurrentUser();
+        if (currentUser) {
+          await checkUserSession();
+        }
+      } catch (error) {
+        console.error("Error handling OAuth response:", error);
+      }
+    };
+
+    const subscription = Linking.addEventListener('url', ({ url }) => {
+      handleOAuthResponse(url);
+    });
+
+    return () => {
+      subscription.remove();
+    };
+  }, []);
 
   const handleLogout = async () => {
     setLogoutLoading(true);
     try {
       await signOut();
       router.push("/login");
-    } catch (error: any) {
-      console.log("Error logging out:", error.message);
+    } catch (error) {
+      console.log("Error logging out:", error instanceof Error ? error.message : String(error));
     } finally {
       setLogoutLoading(false);
     }
@@ -31,36 +69,52 @@ export default function Index() {
 
   const checkUserSession = async () => {
     try {
-      const { email, email_verified, sub } = await fetchUserAttributes();
-      console.log(email);
-
-      authHeader()
-      
-      setUserDetails({ email, email_verified, sub });
-    } catch (err) {
-      console.log("User not logged in or error getting user:", err);
-      setUserDetails(null);
-      router.push("/login");
-    } finally {
-      setLoading(false);
-    }
-
-    try {
-      const session = await fetchAuthSession();
-      setSession({
-        idToken: session?.tokens?.idToken,
-        accessToken: session?.tokens?.accessToken,
+      const userAttrs = await fetchUserAttributes();
+      setUserDetails({
+        email: userAttrs.email,
+        email_verified: userAttrs.email_verified === 'true',
+        sub: userAttrs.sub
       });
-      console.log("id token", session?.tokens?.idToken);
-      console.log("access token", session?.tokens?.accessToken);
-    } catch (err) {
-      console.log("User not logged in or error getting user:", err);
+      
+      await authHeader();
+
+      const currentSession = await fetchAuthSession();
+      setSession({
+        idToken: currentSession.tokens?.idToken?.toString(),
+        accessToken: currentSession.tokens?.accessToken?.toString(),
+      });
+
+      console.log("id token", currentSession.tokens?.idToken);
+      console.log("access token", currentSession.tokens?.accessToken);
+    } catch (error) {
+      console.log("User not logged in or error getting user:", error);
       setUserDetails(null);
       router.push("/login");
     } finally {
       setLoading(false);
     }
   };
+
+  // Initial session check
+  useEffect(() => {
+    const initializeAuth = async () => {
+      try {
+        const currentUser = await getCurrentUser();
+        if (currentUser) {
+          await checkUserSession();
+        } else {
+          setLoading(false);
+          router.push("/login");
+        }
+      } catch (error) {
+        console.log("Error checking initial auth:", error);
+        setLoading(false);
+        router.push("/login");
+      }
+    };
+
+    initializeAuth();
+  }, []);
 
   useFocusEffect(
     useCallback(() => {
@@ -78,7 +132,7 @@ export default function Index() {
     <View style={styles.container}>
       <Text style={styles.title}>Welcome to the Index Page!</Text>
       {userDetails ? (
-        <Text style={styles.email}>Email: {userDetails?.email}</Text>
+        <Text style={styles.email}>Email: {userDetails.email}</Text>
       ) : (
         <Text style={styles.errorText}>User not found</Text>
       )}
@@ -95,10 +149,6 @@ export default function Index() {
           style={styles.loading}
         />
       )}
-      <Button
-        title="Sign In with Google"
-        onPress={() => signInWithRedirect({ provider: "Google" })}
-      />
     </View>
   );
 }
