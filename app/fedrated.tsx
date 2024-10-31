@@ -1,4 +1,3 @@
-// Federated.tsx
 import {
   Button,
   StyleSheet,
@@ -6,18 +5,21 @@ import {
   View,
   ActivityIndicator,
   Platform,
+  Linking,
 } from "react-native";
 import React, { useState, useEffect } from "react";
 import { signInWithRedirect, getCurrentUser } from "aws-amplify/auth";
 import { router } from "expo-router";
 import * as WebBrowser from "expo-web-browser";
 
+// Enable WebBrowser redirect handling
+WebBrowser.maybeCompleteAuthSession();
+
 const Federated = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    // Check if user is already authenticated
     checkAuth();
   }, []);
 
@@ -25,13 +27,22 @@ const Federated = () => {
     try {
       const user = await getCurrentUser();
       if (user) {
-        // User is authenticated, redirect to home
         router.replace("/");
       }
     } catch (err) {
-      // User is not authenticated, continue showing sign-in options
       console.log("User not authenticated:", err);
     }
+  };
+
+  const constructHostedUIURL = () => {
+    // Ensure the redirect URI is properly encoded
+    
+    // Construct the hosted UI URL with all required parameters
+    const hostedUIURL = 
+      "https://nick.auth.us-east-1.amazoncognito.com/login?client_id=6878lk42lk73vv8a7jr4uspknk&response_type=code&scope=email+openid+phone&redirect_uri=reistta%3A%2F%2F";
+
+    console.log('Hosted UI URL:', hostedUIURL);
+    return hostedUIURL;
   };
 
   const handleGoogleSignIn = async () => {
@@ -40,22 +51,41 @@ const Federated = () => {
 
     try {
       if (Platform.OS === "web") {
-        // Web platform can use direct redirect
         await signInWithRedirect({ provider: "Google" });
-        console.log("signInWithRedirect");
-        
       } else {
-        const res = await WebBrowser.openAuthSessionAsync(
-          "https://nick.auth.us-east-1.amazoncognito.com/login?client_id=6878lk42lk73vv8a7jr4uspknk&response_type=code&scope=email+openid+phone&redirect_uri=reistta%3A%2F%2F"
-        );
-        console.log("result:::::::::" ,res);
+        // Log initial state
+        console.log('Starting Google Sign In...');
         
+        // Get the hosted UI URL
+        const authURL = constructHostedUIURL();
+        
+        // Open the auth session with more options
+        const result = await WebBrowser.openAuthSessionAsync(
+          authURL,
+          'reistta://',
+          {
+            showInRecents: true,
+            preferEphemeralSession: true,
+            createTask: false,
+          }
+        );
+        
+        console.log('WebBrowser Result:', JSON.stringify(result, null, 2));
+        
+        if (result.type === 'success' && result.url) {
+          console.log('Success URL:', result.url);
+          // Try to get user after successful redirect
+          await checkAuth();
+        } else if (result.type === 'dismiss') {
+          console.log('Auth session was dismissed');
+          setError('Sign in was cancelled. Please try again.');
+        }
       }
     } catch (err) {
+      console.error('Detailed error:', JSON.stringify(err, null, 2));
       const errorMessage =
         err instanceof Error ? err.message : "Failed to sign in with Google";
       setError(errorMessage);
-      console.error("Google Sign-in Error:", err);
     } finally {
       setIsLoading(false);
     }
@@ -76,6 +106,10 @@ const Federated = () => {
       )}
 
       {error && <Text style={styles.errorText}>{error}</Text>}
+
+      <Text style={styles.infoText}>
+        Make sure you have a Google account set up on your device.
+      </Text>
     </View>
   );
 };
@@ -103,4 +137,18 @@ const styles = StyleSheet.create({
     marginTop: 10,
     textAlign: "center",
   },
+  infoText: {
+    marginTop: 20,
+    color: '#666',
+    textAlign: 'center',
+  }
 });
+
+
+
+
+
+
+
+
+
