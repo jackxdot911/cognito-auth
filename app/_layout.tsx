@@ -19,7 +19,7 @@ const amplifyConfig : any = {
           scopes: ['email', 'openid' , 'profile'],
           redirectSignIn: ['reistta://'],
           redirectSignOut: ['reistta://'],
-          responseType: 'token',
+          responseType: 'code',
           providers: ['Google']
         }
       }
@@ -28,7 +28,7 @@ const amplifyConfig : any = {
 };
 
 // Configure Amplify
-Amplify.configure(amplifyConfig ,{ ssr: true });
+Amplify.configure(amplifyConfig);
 
 // Prevent splash screen from auto-hiding
 SplashScreen.preventAutoHideAsync().catch((err) =>
